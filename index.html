@@ -22,6 +22,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #f4f7fc;
             color: #1f2937;
+            /* (排版修正) 移除 p-4 */
         }
 
         /* 玻璃效果 (Glassmorphism) - 亮色主題 */
@@ -56,6 +57,8 @@
             opacity: 0.15; 
             filter: blur(100px); 
             will-change: transform, opacity;
+            /* (新) 讓動畫速度可以被 JS 控制 */
+            transition: all 0.5s ease-out;
         }
 
         .blob-1 {
@@ -123,6 +126,8 @@
             height: 100%;
             /* 應用動畫 */
             animation: slideInUp 0.4s ease-out;
+            /* (新) 確保 canvas 在內部正確定位 */
+            position: relative; 
         }
 
         .video-card video {
@@ -148,6 +153,8 @@
             opacity: 0;
             transition: opacity 0.2s ease;
             pointer-events: none; 
+            /* (新) 確保在粒子之上 */
+            z-index: 30;
         }
         
         .is-speaking .speaking-indicator {
@@ -166,7 +173,12 @@
             border-radius: 9999px; 
             font-size: 14px; 
             font-weight: 500; 
+            /* (新) 確保在粒子之上 */
+            z-index: 20;
         }
+
+        /* --- (移除) 粒子畫布 --- */
+        /* .particle-canvas { ... } */
 
         /* --- (新) 動態視訊網格 --- */
         
@@ -315,6 +327,34 @@
             border-radius: 50%;
             transition: transform 0.2s ease-in-out;
         }
+        
+        /* --- (新) 複製提示 --- */
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; transform: translateY(-20px); }
+            10%, 90% { opacity: 1; transform: translateY(0); }
+        }
+        .copy-toast {
+            animation: fadeInOut 3s ease-in-out forwards;
+        }
+
+        /* --- (新) 手機直立模式覆蓋 --- */
+        @media (max-width: 767px) and (orientation: portrait) {
+            /* 3人以上，一律改為 2 欄 */
+            .layout-3, .layout-4, .layout-5-6, .layout-7-9, .layout-10-plus {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto;
+            }
+            /* 3 人時，第三個元素佔滿整行 */
+            .layout-3 .video-card:nth-child(3) {
+                grid-column: 1 / span 2;
+                width: 100%; /* 佔滿寬度 */
+                aspect-ratio: 16 / 10; /* 恢復正常比例 */
+            }
+            /* 修正視訊網格，使其可以滾動 */
+            #video-grid {
+                overflow-y: auto;
+            }
+        }
 
     </style>
 </head>
@@ -346,9 +386,16 @@
                     <span class="relative bg-white/0 backdrop-blur-sm px-3 text-sm text-gray-500">或</span>
                 </div>
 
-                <button id="create-room-btn" class="w-full bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-lg text-lg font-medium transition-colors shadow-lg">
-                    建立新房間
-                </button>
+                <!-- *** (新) 並排按鈕 *** -->
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="create-room-btn" class="w-full bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-lg text-lg font-medium transition-colors shadow-lg">
+                        建立新房間
+                    </button>
+                    <button id="join-public-room-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white px-6 py-4 rounded-lg text-lg font-medium transition-colors shadow-lg">
+                        加入公開房
+                    </button>
+                </div>
+
             </div>
             
             <p id="lobby-error" class="text-red-500 text-sm mt-4 h-5"></p> <!-- 錯誤訊息顯示區 -->
@@ -362,6 +409,7 @@
         <div id="video-grid" class="w-full h-full grid gap-4 pb-24">
             <!-- 本地視訊會被加到這裡 -->
             <div id="local-video-card" class="video-card glassmorphism relative group">
+                <!-- (移除) 粒子畫布 -->
                 <video id="local-video" autoplay playsinline muted></video>
                 <div id="local-nickname-tag" class="nickname-tag">
                     我 (本地)
@@ -373,7 +421,8 @@
 
         <!-- 底部控制列 -->
         <div id="controls-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glassmorphism p-3 shadow-2xl">
-            <div class="flex items-center gap-4">
+            <!-- (新) gap-3 -->
+            <div class="flex items-center gap-3">
                 <!-- 麥克風按鈕 -->
                 <button id="toggle-mic" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
                     <svg id="icon-mic" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -389,6 +438,11 @@
                 <!-- 設定按鈕 -->
                 <button id="toggle-settings" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+
+                <!-- *** (新功能) 分享按鈕 *** -->
+                <button id="share-room-btn" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
                 </button>
                 
                 <!-- *** (新功能) 退出房間按鈕 *** -->
@@ -406,6 +460,11 @@
             <div>
                 您的連線 ID: <span id="my-user-id" class="font-bold text-blue-600">連線中...</span>
             </div>
+        </div>
+
+        <!-- *** (新) 複製提示 *** -->
+        <div id="copy-toast" class="hidden fixed top-6 left-1/2 -translate-x-1/2 z-[200] glassmorphism py-2 px-4 shadow-lg text-sm text-gray-900 font-medium">
+            已複製房間連結！
         </div>
 
         <!-- 設定彈窗 (預設隱藏) -->
@@ -508,7 +567,8 @@
             where, 
             addDoc,
             serverTimestamp,
-            updateDoc 
+            updateDoc,
+            getDocs // *** (新) 匯入 getDocs ***
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase 配置 ---
@@ -545,6 +605,16 @@
         
         let authReady = false; 
         let roomJoined = false; 
+        let userDocUnsubscribe = null; 
+
+        const PUBLIC_ROOM_ID = 'public-lobby'; 
+        const MAX_PARTICIPANTS = 8; // *** (新) 房間人數上限 ***
+
+        // *** (新) 背景動畫變數 ***
+        let globalAudioLevel = 0;
+        let blobAnimations = [];
+        let animationFrameId = null;
+
 
         // STUN 伺服器
         const iceServers = {
@@ -554,14 +624,18 @@
             ],
         };
 
+        // --- (新) 粒子類別 (已移除) ---
+
         // --- DOM 元素 ---
         const lobbyPage = document.getElementById('lobby-page');
         const videoChatPage = document.getElementById('video-chat-page');
         const roomIdInput = document.getElementById('room-id-input');
         const joinRoomBtn = document.getElementById('join-room-btn');
         const createRoomBtn = document.getElementById('create-room-btn');
+        const joinPublicRoomBtn = document.getElementById('join-public-room-btn'); 
         const lobbyError = document.getElementById('lobby-error');
         const roomIdDisplay = document.getElementById('room-id-display');
+        const copyToast = document.getElementById('copy-toast');
 
         const videoGrid = document.getElementById('video-grid');
         const localVideo = document.getElementById('local-video');
@@ -610,37 +684,106 @@
             }
         }
         
-        // --- 1. 大廳邏輯 (Lobby) ---
+        // --- 1. 大廳邏輯 (Lobby) & URL 處理 ---
         function initLobby() {
-            createRoomBtn.onclick = () => {
+            // *** (新) 改為 async ***
+            createRoomBtn.onclick = async () => {
                 const newRoomId = Math.random().toString(36).substring(2, 8); 
-                joinRoom(newRoomId);
+                await joinRoom(newRoomId);
             };
 
-            joinRoomBtn.onclick = () => {
+            // *** (新) 改為 async ***
+            joinRoomBtn.onclick = async () => {
                 const roomId = roomIdInput.value.trim();
                 if (roomId) {
-                    joinRoom(roomId);
+                    await joinRoom(roomId);
                 } else {
                     lobbyError.textContent = "請輸入房間 ID。";
                 }
             };
+            
+            // *** (新) 改為 async ***
+            joinPublicRoomBtn.onclick = async () => {
+                await joinRoom(PUBLIC_ROOM_ID);
+            };
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomIdFromUrl = urlParams.get('room');
+            if (roomIdFromUrl) {
+                console.log("從 URL 偵測到房間 ID:", roomIdFromUrl);
+                roomIdInput.value = roomIdFromUrl;
+                joinRoom(roomIdFromUrl); // URL 自動加入
+            }
         }
 
         // --- 2. 加入房間 & 啟動順序 ---
-        function joinRoom(roomId) {
+        // *** (新) 改為 async 並加入人數檢查 ***
+        async function joinRoom(roomId) {
+            if (roomJoined) return; 
+            lobbyError.textContent = "正在連線...";
+
+            // 1. 等待 Firebase 認證就緒
+            if (!authReady) {
+                try {
+                    // 等待 onAuthStateChanged 觸發
+                    await new Promise((resolve, reject) => {
+                        const unsubscribe = onAuthStateChanged(auth, (user) => {
+                            if (user) {
+                                userId = user.uid;
+                                myUserIdDisplay.textContent = userId.substring(0, 8) + "..."; 
+                                authReady = true;
+                                unsubscribe();
+                                resolve();
+                            }
+                        }, (error) => {
+                            reject(error);
+                        });
+                    });
+                } catch (error) {
+                    console.error("等待認證時出錯:", error);
+                    lobbyError.textContent = "認證失敗，請重試。";
+                    return;
+                }
+            }
+            
+            // 2. 認證已就緒，檢查房間人數
+            lobbyError.textContent = "正在檢查房間...";
+            const tempUsersPath = `artifacts/${appId}/public/data/webrtc_liquid_chat/${roomId}/users`;
+            try {
+                const usersQuery = query(collection(db, tempUsersPath));
+                const usersSnapshot = await getDocs(usersQuery);
+                
+                if (usersSnapshot.size >= MAX_PARTICIPANTS) {
+                    lobbyError.textContent = `加入失敗：此房間已滿 (最多 ${MAX_PARTICIPANTS} 人)。`;
+                    return;
+                }
+            } catch (e) {
+                console.error("檢查房間人數失敗:", e);
+                lobbyError.textContent = "檢查房間失敗，請確認 ID 是否正確。";
+                return;
+            }
+
+            // 3. 房間未滿，正式加入
+            console.log("房間檢查通過，正在加入...");
             currentRoomId = roomId;
             roomJoined = true;
             lobbyError.textContent = "";
             
             roomIdDisplay.textContent = currentRoomId;
 
+            try {
+                const url = new URL(window.location);
+                url.searchParams.set('room', roomId);
+                window.history.pushState({}, '', url);
+            } catch (e) {
+                console.warn("無法更新 URL (在 blob 環境中為正常現象):", e.message);
+            }
+
             lobbyPage.classList.add('hidden');
             videoChatPage.classList.remove('hidden');
 
-            if (authReady) {
-                startApp();
-            }
+            // 4. 啟動 WebRTC
+            startApp();
         }
         
         // --- 3. 初始化 Firebase & 認證 ---
@@ -651,19 +794,17 @@
                 auth = getAuth(app);
                 
                 onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        // 登入成功
+                    if (user && !authReady) {
+                        // 這是第一次匿名登入成功
+                        console.log("Firebase 認證就緒。");
                         userId = user.uid;
                         myUserIdDisplay.textContent = userId.substring(0, 8) + "..."; 
                         authReady = true;
-                        
-                        // 如果房間也加入了，啟動 app
-                        if (roomJoined) {
-                            startApp();
-                        }
-                    } else {
-                        // 用戶已登出 (不應該發生在匿名登入中)
-                        // 但如果發生，我們嘗試再次匿名登入
+                        // 注意：我們不在這裡呼叫 startApp
+                        // startApp 由 joinRoom 觸發
+                    } else if (!user) {
+                        // 匿名登入可能已過期或失敗
+                        console.log("偵測到登出，嘗試重新匿名登入...");
                         try {
                             await signInAnonymously(auth);
                         } catch (anonError) {
@@ -672,22 +813,15 @@
                     }
                 });
                 
-                // *** (錯誤修正) ***
-                // 移除 __initial_auth_token 檢查，
-                // 強制一律使用匿名登入來登入您自己的 vdctest1 專案。
-                // 這會觸發上面的 onAuthStateChanged
+                // 觸發第一次 onAuthStateChanged
                 await signInAnonymously(auth);
 
             } catch (error) {
                 console.error("Firebase 初始化失敗:", error);
-                // 顯示特定的 auth/configuration-not-found 錯誤
                 if (error.code === 'auth/configuration-not-found') {
                     lobbyPage.classList.remove('hidden');
                     videoChatPage.classList.add('hidden');
                     lobbyError.textContent = "Firebase 錯誤：尚未啟用匿名登入。";
-                } else if (error.code === 'auth/custom-token-mismatch') {
-                     // 捕捉並顯示這個錯誤
-                     lobbyError.textContent = "Firebase 權杖錯誤 (請忽略)。";
                 }
                 myUserIdDisplay.textContent = "Firebase 錯誤";
             }
@@ -696,13 +830,8 @@
         
         // --- 4. 啟動應用程式 (WebRTC) ---
         async function startApp() {
-            if (!userId || !currentRoomId) {
-                console.error("Auth 或 Room ID 尚未準備就緒，無法啟動 App。");
-                return;
-            }
-
+            // 此時 authReady 和 roomJoined 必為 true
             try {
-                // *** 設定動態 Firestore 路徑 ***
                 usersCollectionPath = `artifacts/${appId}/public/data/webrtc_liquid_chat/${currentRoomId}/users`;
                 signalsCollectionPath = `artifacts/${appId}/public/data/webrtc_liquid_chat/${currentRoomId}/signals`;
 
@@ -715,15 +844,18 @@
                     nickname: userNickname 
                 });
                 
-                window.addEventListener('beforeunload', (e) => {
-                    deleteDoc(userDocRef); 
-                });
+                userDocUnsubscribe = () => {
+                    deleteDoc(userDocRef);
+                };
+                window.addEventListener('beforeunload', userDocUnsubscribe);
 
                 listenForPeers();
                 listenForSignals();
                 initControlEvents();
                 
-                // *** 啟動時呼叫排版 ***
+                // *** (新) 啟動背景動畫循環 ***
+                startBackgroundAnimationLoop();
+                
                 updateGridLayout();
                 
             } catch (error) {
@@ -732,6 +864,7 @@
                 if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
                     lobbyPage.classList.remove('hidden');
                     videoChatPage.classList.add('hidden');
+                    window.history.pushState({}, '', window.location.pathname);
                     lobbyError.textContent = "錯誤：無法取得攝影機或麥克風權限。";
                 } else {
                     alert("無法取得您的攝影機或麥克風權限。請檢查瀏覽器設定。");
@@ -759,7 +892,6 @@
                 ...constraints.video
             };
 
-            // *** 處理權限錯誤 ***
             let stream;
             try {
                  stream = await navigator.mediaDevices.getUserMedia({ 
@@ -768,7 +900,6 @@
                 });
             } catch (error) {
                 console.error("getUserMedia 錯誤:", error);
-                // 將錯誤丟出，讓 startApp() 可以捕捉到
                 throw error;
             }
             
@@ -790,12 +921,12 @@
             gainNode.connect(localAudioAnalyser);
             localAudioAnalyser.connect(localStreamDestination);
             
+            // *** (修改) 移除粒子畫布參數 ***
             detectSpeaking(localAudioAnalyser, localAudioDataArray, localVideoCard, micVolumeMeter);
             
             const controlledAudioTrack = localStreamDestination.stream.getAudioTracks()[0];
             const videoTrack = stream.getVideoTracks()[0];
             
-            // 確保軌道存在
             if (!videoTrack || !controlledAudioTrack) {
                 console.error("無法取得音訊或視訊軌道");
                 return;
@@ -863,6 +994,13 @@
             }
         }
         
+        // --- (移除) 粒子畫布設定 ---
+        // setupParticleCanvas(...)
+
+        // (移除) 視窗大小改變 ...
+        // window.addEventListener('resize', ...)
+
+        // *** (修改) detectSpeaking 移除粒子邏輯，新增全域音量 ***
         function detectSpeaking(analyser, dataArray, cardElement, volumeMeter) {
             const update = () => {
                 if (!analyser || analyser.context.state === 'closed') return;
@@ -870,6 +1008,8 @@
                 analyser.getByteFrequencyData(dataArray);
                 let sum = dataArray.reduce((a, b) => a + b, 0);
                 let average = sum / dataArray.length; 
+
+                // --- (移除) 粒子邏輯 ---
 
                 if (volumeMeter) {
                     const volumePercent = (average / 255) * 100;
@@ -898,7 +1038,8 @@
                     }
                 }
                 
-                if (average > 20) { 
+                const speakingThreshold = 20; // 說話閾值
+                if (average > speakingThreshold) { 
                     cardElement.classList.add('is-speaking');
                     
                     if (cardElement.speakingTimer) {
@@ -908,11 +1049,58 @@
                     cardElement.speakingTimer = setTimeout(() => {
                         cardElement.classList.remove('is-speaking');
                     }, 500);
+
+                    // --- (新) 更新全域音量 ---
+                    globalAudioLevel = Math.max(globalAudioLevel, average);
+                    // --- 結束 ---
+
                 }
                 
                 requestAnimationFrame(update);
             };
             update();
+        }
+
+        // --- (新) 背景動畫循環 ---
+        function startBackgroundAnimationLoop() {
+            // 獲取所有動畫物件
+            document.querySelectorAll('.blob').forEach(blob => {
+                blobAnimations.push(...blob.getAnimations());
+            });
+
+            function updateLoop() {
+                // 音量隨時間衰減
+                globalAudioLevel *= 0.95; 
+                if (globalAudioLevel < 1) globalAudioLevel = 0;
+
+                // 映射音量 (0-255) 到播放速率 (0.5x - 3x)
+                const maxVol = 100; // 假設 100 是正常的說話音量
+                let playbackRate = 1 + (globalAudioLevel / maxVol) * 2; // 1x (安靜) 到 3x (大聲)
+                playbackRate = Math.max(0.5, Math.min(playbackRate, 3)); // 限制在 0.5x 到 3x 之間
+
+                if (blobAnimations.length > 0) {
+                    try {
+                        blobAnimations.forEach(anim => {
+                            anim.updatePlaybackRate(playbackRate);
+                        });
+                    } catch (e) {
+                        console.warn("無法更新動畫速率:", e.message);
+                        // 如果出錯 (例如動畫被移除)，重新獲取
+                        blobAnimations = [];
+                        document.querySelectorAll('.blob').forEach(blob => {
+                            blobAnimations.push(...blob.getAnimations());
+                        });
+                    }
+                } else {
+                    // 如果一開始沒抓到，再抓一次
+                    document.querySelectorAll('.blob').forEach(blob => {
+                        blobAnimations.push(...blob.getAnimations());
+                    });
+                }
+                
+                animationFrameId = requestAnimationFrame(updateLoop);
+            }
+            updateLoop();
         }
 
         // --- 6. WebRTC 核心邏輯 ---
@@ -1064,24 +1252,23 @@
             card.className = 'video-card remote glassmorphism relative group';
             card.dataset.userId = peerId;
             
-            const video = document.createElement('video');
+            // *** (修改) 移除 canvas ***
+            card.innerHTML = `
+                <video autoplay playsinline></video>
+                <div id="nickname-${peerId}" class="nickname-tag">
+                    ${nickname || `用戶 ${peerId.substring(0, 6)}`}
+                </div>
+                <div class="speaking-indicator"></div>
+            `;
+            
+            const video = card.querySelector('video');
             video.srcObject = stream;
-            video.autoplay = true;
-            video.playsInline = true;
             video.volume = outputVolumeSlider.value; 
 
-            const nameTag = document.createElement('div');
-            nameTag.className = 'nickname-tag'; 
-            nameTag.id = `nickname-${peerId}`;
-            nameTag.textContent = nickname || `用戶 ${peerId.substring(0, 6)}`;
-            
-            const speakingIndicator = document.createElement('div');
-            speakingIndicator.className = 'speaking-indicator';
-
-            card.appendChild(video);
-            card.appendChild(nameTag);
-            card.appendChild(speakingIndicator);
             videoGrid.appendChild(card);
+            
+            // *** (移除) 粒子畫布設定 ***
+            // setupParticleCanvas(card);
             
             try {
                 const remoteAudioContext = new AudioContext();
@@ -1090,6 +1277,7 @@
                 remoteAnalyser.fftSize = 256;
                 const remoteDataArray = new Uint8Array(remoteAnalyser.frequencyBinCount);
                 remoteSource.connect(remoteAnalyser);
+                // *** (修改) 移除粒子畫布參數 ***
                 detectSpeaking(remoteAnalyser, remoteDataArray, card, null);
             } catch (e) {
                 console.warn("無法為遠端串流建立音量分析 (可能沒有音軌):", e);
@@ -1110,9 +1298,14 @@
             }
         }
 
-        // --- 8. (新) 退出房間 ---
+        // --- 8. (新) 退出房間 & 分享 ---
         async function leaveRoom() {
             console.log("正在退出房間...");
+
+            // (新) 停止背景動畫
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
 
             // 1. 關閉所有 P2P 連線
             for (const peerId in peerConnections) {
@@ -1140,9 +1333,56 @@
                 }
             }
             
-            // 4. 重新載入頁面，回到大廳
+            // 4. (新) 移除 beforeunload 事件監聽
+            if(userDocUnsubscribe) {
+                window.removeEventListener('beforeunload', userDocUnsubscribe);
+            }
+
+            // 5. 重新載入頁面，回到大廳 (並清除 URL)
+            // (錯誤修正) 將 pushState 包在 try...catch 中
+            try {
+                const url = new URL(window.location);
+                url.searchParams.delete('room');
+                window.history.pushState({}, '', url);
+            } catch (e) {
+                 console.warn("無法清除 URL (在 blob 環境中為正常現象):", e.message);
+            }
+            
+            // 重新載入頁面
             location.reload();
         }
+
+        // (新) 複製連結
+        function copyRoomLink() {
+            const urlToCopy = window.location.href;
+            
+            // 建立一個臨時 textarea 來複製
+            const textArea = document.createElement('textarea');
+            textArea.value = urlToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                // (重要) 使用 execCommand 因為 navigator.clipboard 在 iframe 中可能被限制
+                document.execCommand('copy');
+                console.log('已複製連結:', urlToCopy);
+                
+                // 顯示提示
+                copyToast.classList.remove('hidden');
+                copyToast.classList.add('copy-toast');
+                setTimeout(() => {
+                    copyToast.classList.add('hidden');
+                    copyToast.classList.remove('copy-toast');
+                }, 3000);
+                
+            } catch (err) {
+                console.error('複製失敗:', err);
+                alert('複製連結失敗，請手動複製網址列！');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
 
         // --- 9. 控制項事件 ---
         function initControlEvents() {
@@ -1150,7 +1390,8 @@
             const toggleVideoBtn = document.getElementById('toggle-video');
             const toggleSettingsBtn = document.getElementById('toggle-settings');
             const closeSettingsBtn = document.getElementById('close-settings');
-            const leaveRoomBtn = document.getElementById('leave-room-btn'); // *** (新) 取得按鈕 ***
+            const leaveRoomBtn = document.getElementById('leave-room-btn'); 
+            const shareRoomBtn = document.getElementById('share-room-btn'); // *** (新) 取得按鈕 ***
             
             const iconMic = document.getElementById('icon-mic');
             const iconMicOff = document.getElementById('icon-mic-off');
@@ -1193,6 +1434,9 @@
             
             // *** (新) 退出按鈕事件 ***
             leaveRoomBtn.onclick = leaveRoom; 
+            
+            // *** (新) 分享按鈕事件 ***
+            shareRoomBtn.onclick = copyRoomLink; 
             
             saveNicknameBtn.onclick = () => {
                 saveNickname(nicknameInput.value, true); 
