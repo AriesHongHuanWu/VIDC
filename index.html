@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Glass P2P 視訊會議</title>
+    
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 載入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/lucide-react.js"></script>
+    
+    <!-- 載入 Google Font (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- 自訂樣式 --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7fc;
+            color: #1f2937;
+        }
+
+        /* 玻璃效果 (Glassmorphism) - 亮色主題 */
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px); 
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 1.5rem; 
+            box-shadow: 0 8px 32px 0 rgba(100, 108, 155, 0.15);
+        }
+
+        /* 隱藏滾動條 */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* --- 動態背景 --- */
+        .background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.15; 
+            filter: blur(100px); 
+            will-change: transform, opacity;
+        }
+
+        .blob-1 {
+            width: 500px;
+            height: 500px;
+            background: #8A2BE2; /* 紫色 */
+            top: -10%;
+            left: -10%;
+            animation: move 15s infinite alternate;
+        }
+
+        .blob-2 {
+            width: 400px;
+            height: 400px;
+            background: #007BFF; /* 藍色 */
+            bottom: -10%;
+            right: -10%;
+            animation: move 18s infinite alternate-reverse;
+        }
+        
+        .blob-3 {
+            width: 300px;
+            height: 300px;
+            background: #FF69B4; /* 粉色 */
+            bottom: 20%;
+            left: 10%;
+            animation: move 12s infinite alternate;
+        }
+
+        .blob-4 {
+            width: 350px;
+            height: 350px;
+            background: #FFFFFF; /* 白色 */
+            top: 20%;
+            right: 20%;
+            animation: move 20s infinite alternate-reverse;
+        }
+
+        @keyframes move {
+            0% {
+                transform: scale(1) translate(0, 0);
+            }
+            100% {
+                transform: scale(1.5) translate(100px, -50px);
+            }
+        }
+
+        /* --- (新) 卡片滑入動畫 --- */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* 視訊卡片樣式 */
+        .video-card {
+            overflow: hidden;
+            transition: all 0.3s ease;
+            width: 100%; 
+            height: 100%;
+            /* 應用動畫 */
+            animation: slideInUp 0.4s ease-out;
+        }
+
+        .video-card video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); 
+        }
+
+        .video-card.remote video {
+            transform: scaleX(1);
+        }
+        
+        .speaking-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 1.5rem;
+            border: 3px solid #34D399; 
+            box-shadow: 0 0 15px #34D399;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none; 
+        }
+        
+        .is-speaking .speaking-indicator {
+            opacity: 1;
+        }
+        
+        .nickname-tag {
+            position: absolute;
+            bottom: 12px; 
+            left: 16px; 
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            padding: 4px 12px; 
+            border-radius: 9999px; 
+            font-size: 14px; 
+            font-weight: 500; 
+        }
+
+        /* --- (新) 動態視訊網格 --- */
+        
+        /* Layout 1: Solo */
+        .layout-1 {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr;
+        }
+        .layout-1 .video-card {
+            aspect-ratio: auto; /* 填滿全螢幕 */
+        }
+
+        /* Layout 2: Duo */
+        .layout-2 {
+            /* 手機上堆疊 */
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr 1fr;
+            align-items: center;
+        }
+        .layout-2 .video-card {
+            aspect-ratio: auto; /* 填滿一半空間 */
+        }
+        /* 電腦上並排 */
+        @media (min-width: 768px) {
+            .layout-2 {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: 1fr;
+            }
+        }
+
+        /* Layout 3: Trio (2 top, 1 bottom) */
+        .layout-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            align-items: start;
+        }
+        .layout-3 .video-card {
+            aspect-ratio: 16 / 9; /* 用戶指定的 16:9 */
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .layout-3 .video-card:nth-child(1) {
+            grid-column: 1 / 2;
+            grid-row: 1 / 2;
+        }
+        .layout-3 .video-card:nth-child(2) {
+            grid-column: 2 / 3;
+            grid-row: 1 / 2;
+        }
+        .layout-3 .video-card:nth-child(3) {
+            grid-column: 1 / span 2;
+            grid-row: 2 / 3;
+            /* 為了保持 16:9，將寬度設為 50% 並置中 */
+            width: 50%; 
+            justify-self: center;
+        }
+        
+        /* Layout 4: Quad (2x2) */
+        .layout-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+         .layout-4 .video-card {
+            aspect-ratio: 16 / 10; /* 恢復預設 */
+        }
+
+        /* Layout 5-6: (3x2) */
+        .layout-5-6 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: repeat(3, 1fr);
+        }
+        .layout-5-6 .video-card { aspect-ratio: 16/10; }
+        @media (min-width: 768px) {
+            .layout-5-6 {
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: repeat(2, 1fr);
+            }
+        }
+
+        /* Layout 7-9: (3x3) */
+        .layout-7-9 {
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+        }
+         .layout-7-9 .video-card { aspect-ratio: 16/10; }
+
+        /* Layout 10+: (4xN, auto rows) */
+        .layout-10-plus {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+        .layout-10-plus .video-card { aspect-ratio: 16/10; }
+        @media (min-width: 1280px) {
+             .layout-10-plus {
+                /* 在大螢幕上最多 4 欄 */
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        
+        /* 麥克風音量條樣式 */
+        progress[value] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            background-color: #e0e0e0;
+        }
+        progress[value]::-webkit-progress-bar {
+            background-color: #e0e0e0;
+            border-radius: 5px;
+        }
+        progress[value]::-webkit-progress-value {
+            background-color: #34D399; /* 綠色 */
+            transition: width 0.1s linear;
+        }
+        
+        /* CSS for Toggle */
+        .toggle-checkbox:checked { background-color: #34D399; }
+        .toggle-checkbox:checked::before { transform: translateX(16px); }
+        .toggle-checkbox::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.2s ease-in-out;
+        }
+
+    </style>
+</head>
+<body class="w-full h-screen overflow-hidden p-4">
+
+    <!-- 動態背景 (全域) -->
+    <div class="background-animation">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="blob blob-4"></div>
+    </div>
+
+    <!-- *** 大廳頁面 *** -->
+    <div id="lobby-page" class="w-full h-full flex items-center justify-center">
+        <div class="glassmorphism w-full max-w-md p-8 rounded-2xl shadow-2xl text-gray-900 text-center">
+            <h1 class="text-3xl font-bold mb-6">Liquid Glass P2P 會議</h1>
+            <p class="text-gray-600 mb-8">請建立一個新房間或加入現有房間。</p>
+            
+            <div class="space-y-4">
+                <input type="text" id="room-id-input" placeholder="輸入房間 ID..." class="w-full bg-black/5 text-gray-900 border-none rounded-lg p-4 text-lg focus:ring-2 focus:ring-blue-500 outline-none placeholder-gray-500">
+                <button id="join-room-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-4 rounded-lg text-lg font-medium transition-colors shadow-lg">
+                    加入房間
+                </button>
+                
+                <div class="relative flex items-center justify-center py-2">
+                    <div class="absolute w-full h-px bg-gray-300"></div>
+                    <span class="relative bg-white/0 backdrop-blur-sm px-3 text-sm text-gray-500">或</span>
+                </div>
+
+                <button id="create-room-btn" class="w-full bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-lg text-lg font-medium transition-colors shadow-lg">
+                    建立新房間
+                </button>
+            </div>
+            
+            <p id="lobby-error" class="text-red-500 text-sm mt-4 h-5"></p> <!-- 錯誤訊息顯示區 -->
+        </div>
+    </div>
+
+    <!-- *** 視訊會議頁面 (預設隱藏) *** -->
+    <div id="video-chat-page" class="hidden">
+    
+        <!-- 主視訊網格 (移除固定的 grid-cols-*) -->
+        <div id="video-grid" class="w-full h-full grid gap-4 p-4 pb-24">
+            <!-- 本地視訊會被加到這裡 -->
+            <div id="local-video-card" class="video-card glassmorphism relative group">
+                <video id="local-video" autoplay playsinline muted></video>
+                <div id="local-nickname-tag" class="nickname-tag">
+                    我 (本地)
+                </div>
+                <div class="speaking-indicator"></div>
+            </div>
+            <!-- 遠端視訊會被加到這裡 -->
+        </div>
+
+        <!-- 底部控制列 -->
+        <div id="controls-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glassmorphism p-3 shadow-2xl">
+            <div class="flex items-center gap-4">
+                <!-- 麥克風按鈕 -->
+                <button id="toggle-mic" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
+                    <svg id="icon-mic" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    <svg id="icon-mic-off" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mic-off hidden"><line x1="16" x2="16" y1="11" y2="15"/><line x1="8" x2="8" y1="11" y2="15"/><line x1="12" x2="12" y1="17" y2="22"/><path d="M15.14 11.14a7 7 0 0 1-10.28 0"/><path d="M19.1 10.1a3 3 0 0 0-2.3-1.4"/><path d="m2 2 20 20"/><path d="M12 2a3 3 0 0 0-3 3v0a3 3 0 0 0 1 2.24"/><path d="M12 10.6V5a3 3 0 0 1 3 3v0c0 .7-.2 1.3-.5 1.8"/></svg>
+                </button>
+                
+                <!-- 視訊按鈕 -->
+                <button id="toggle-video" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
+                    <svg id="icon-video" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                    <svg id="icon-video-off" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video-off hidden"><path d="M16 16v-3m0-8.73V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.27"/><path d="m2 2 20 20"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+                </button>
+                
+                <!-- 設定按鈕 -->
+                <button id="toggle-settings" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 用戶 ID & 房間 ID 顯示 -->
+        <div id="user-id-display" class="fixed top-4 left-4 z-50 glassmorphism p-3 px-4 shadow-lg text-sm text-gray-900 space-y-2">
+            <div>
+                房間 ID: <span id="room-id-display" class="font-bold text-green-600">...</span>
+            </div>
+            <div>
+                您的連線 ID: <span id="my-user-id" class="font-bold text-blue-600">連線中...</span>
+            </div>
+        </div>
+
+        <!-- 設定彈窗 (預設隱藏) -->
+        <div id="settings-modal" class="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center p-4 hidden">
+            <div class="glassmorphism w-full max-w-md p-6 rounded-2xl shadow-2xl border-2 border-white/20 text-gray-900">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold">設定</h2>
+                    <button id="close-settings" class="p-2 rounded-full hover:bg-white/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                    </button>
+                </div>
+
+                <!-- 滾動容器 -->
+                <div class="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                
+                    <!-- 暱稱設定 -->
+                    <div class="space-y-2">
+                         <label for="nickname-input" class="block text-sm font-medium">您的暱稱</label>
+                         <div class="flex gap-2">
+                            <input type="text" id="nickname-input" placeholder="輸入您的暱稱..." class="w-full bg-black/5 text-gray-900 border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <button id="save-nickname-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                儲存
+                            </button>
+                         </div>
+                    </div>
+                
+                    <!-- 麥克風選擇 -->
+                    <div>
+                        <label for="mic-select" class="block text-sm font-medium mb-2">麥克風設備</label>
+                        <select id="mic-select" class="w-full bg-black/5 text-gray-900 border-none rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                    </div>
+
+                    <!-- 鏡頭選擇 -->
+                    <div>
+                        <label for="video-select" class="block text-sm font-medium mb-2">視訊設備</label>
+                        <select id="video-select" class="w-full bg-black/5 text-gray-900 border-none rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                    </div>
+
+                    <!-- 瀏覽器 AI 降噪 -->
+                    <div class="flex items-center justify-between">
+                        <label for="noise-suppression" class="text-sm font-medium">啟用瀏覽器降噪 (AI)</label>
+                        <input type="checkbox" id="noise-suppression" class="toggle-checkbox relative w-10 h-6 bg-gray-600 rounded-full cursor-pointer appearance-none" checked>
+                    </div>
+
+                    <!-- 輸入音量 -->
+                    <div>
+                        <label for="input-volume" class="block text-sm font-medium mb-2">輸入音量 (增益)</label>
+                        <input id="input-volume" type="range" min="0" max="2" value="1" step="0.1" class="w-full h-2 bg-black/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- 輸出音量 -->
+                    <div>
+                        <label for="output-volume" class="block text-sm font-medium mb-2">輸出音量 (遠端)</label>
+                        <input id="output-volume" type="range" min="0" max="1" value="0.8" step="0.1" class="w-full h-2 bg-black/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <!-- 麥克風音量計 -->
+                    <div class="pt-2">
+                        <label class="block text-sm font-medium mb-2">即時麥克風音量</label>
+                        <progress id="mic-volume-meter" max="100" value="0" class="w-full"></progress>
+                    </div>
+                    
+                    <!-- 噪音閥 -->
+                    <div class="flex items-center justify-between">
+                        <label for="noise-gate" class="text-sm font-medium">啟用噪音閥</label>
+                        <input type="checkbox" id="noise-gate" class="toggle-checkbox relative w-10 h-6 bg-gray-600 rounded-full cursor-pointer appearance-none">
+                    </div>
+                    
+                    <!-- 噪音閥閾值 -->
+                    <div>
+                        <label for="noise-gate-threshold" class="block text-sm font-medium mb-2">噪音閥閾值</label>
+                        <input id="noise-gate-threshold" type="range" min="0" max="100" value="20" step="1" class="w-full h-2 bg-black/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    
+    </div> <!-- 結束 #video-chat-page -->
+    
+    
+    <!-- 載入 Firebase 服務 -->
+    <script type="module">
+        // --- Firebase (v11) ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection, 
+            query, 
+            where, 
+            addDoc,
+            serverTimestamp,
+            updateDoc 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase 配置 ---
+        
+        // *** 這是您專案 (vdctest1) 的設定 ***
+        const firebaseConfig = {
+          apiKey: "AIzaSyCS3awO8vS-6VheW85nxahdA42ZSeG8GcI",
+          authDomain: "vdctest1.firebaseapp.com",
+          projectId: "vdctest1",
+          storageBucket: "vdctest1.firebasestorage.app",
+          messagingSenderId: "213199996964",
+          appId: "1:213199996964:web:6ead9756be010926cef0b1",
+          measurementId: "G-5B34S4HK7X"
+        };
+        
+        // *** 手動設定一個固定的 appId ***
+        const appId = 'vdctest1-app-production'; // 使用您自訂的 ID
+            
+        // --- 全域變數 ---
+        let db, auth;
+        let userId, userNickname;
+        let localStream;
+        let audioContext; 
+        let gainNode; 
+        let localAudioSource;
+        let localStreamDestination;
+        let peerConnections = {}; 
+        let remoteStreams = {}; 
+        let localAudioAnalyser, localAudioDataArray;
+        
+        let currentRoomId; 
+        let usersCollectionPath; 
+        let signalsCollectionPath; 
+        
+        let authReady = false; 
+        let roomJoined = false; 
+
+        // STUN 伺服器
+        const iceServers = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ],
+        };
+
+        // --- DOM 元素 ---
+        const lobbyPage = document.getElementById('lobby-page');
+        const videoChatPage = document.getElementById('video-chat-page');
+        const roomIdInput = document.getElementById('room-id-input');
+        const joinRoomBtn = document.getElementById('join-room-btn');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const lobbyError = document.getElementById('lobby-error');
+        const roomIdDisplay = document.getElementById('room-id-display');
+
+        const videoGrid = document.getElementById('video-grid');
+        const localVideo = document.getElementById('local-video');
+        const localVideoCard = document.getElementById('local-video-card');
+        const localNicknameTag = document.getElementById('local-nickname-tag');
+        const settingsModal = document.getElementById('settings-modal');
+        const micSelect = document.getElementById('mic-select');
+        const videoSelect = document.getElementById('video-select');
+        const inputVolumeSlider = document.getElementById('input-volume');
+        const outputVolumeSlider = document.getElementById('output-volume');
+        const noiseSuppressionCheckbox = document.getElementById('noise-suppression');
+        const myUserIdDisplay = document.getElementById('my-user-id');
+        
+        const nicknameInput = document.getElementById('nickname-input');
+        const saveNicknameBtn = document.getElementById('save-nickname-btn');
+        const micVolumeMeter = document.getElementById('mic-volume-meter');
+        const noiseGateCheckbox = document.getElementById('noise-gate');
+        const noiseGateThresholdSlider = document.getElementById('noise-gate-threshold');
+        
+        // --- 0. 暱稱輔助函式 ---
+        function getNickname() {
+            let name = localStorage.getItem('liquid_chat_nickname');
+            if (!name) {
+                name = `訪客${Math.floor(Math.random() * 1000)}`;
+                saveNickname(name, false); 
+            }
+            nicknameInput.value = name;
+            localNicknameTag.textContent = name;
+            userNickname = name;
+            return name;
+        }
+
+        async function saveNickname(name, updateFirestore = true) {
+            if (!name) name = `訪客${Math.floor(Math.random() * 1000)}`;
+            localStorage.setItem('liquid_chat_nickname', name);
+            localNicknameTag.textContent = name;
+            userNickname = name;
+            
+            if (updateFirestore && userId && db && usersCollectionPath) {
+                const userDocRef = doc(db, usersCollectionPath, userId);
+                try {
+                    await updateDoc(userDocRef, { nickname: name });
+                } catch (e) {
+                    console.warn("更新暱稱失敗 (可能文件尚不存在):", e.message);
+                }
+            }
+        }
+        
+        // --- 1. 大廳邏輯 (Lobby) ---
+        function initLobby() {
+            createRoomBtn.onclick = () => {
+                const newRoomId = Math.random().toString(36).substring(2, 8); 
+                joinRoom(newRoomId);
+            };
+
+            joinRoomBtn.onclick = () => {
+                const roomId = roomIdInput.value.trim();
+                if (roomId) {
+                    joinRoom(roomId);
+                } else {
+                    lobbyError.textContent = "請輸入房間 ID。";
+                }
+            };
+        }
+
+        // --- 2. 加入房間 & 啟動順序 ---
+        function joinRoom(roomId) {
+            currentRoomId = roomId;
+            roomJoined = true;
+            lobbyError.textContent = "";
+            
+            roomIdDisplay.textContent = currentRoomId;
+
+            lobbyPage.classList.add('hidden');
+            videoChatPage.classList.remove('hidden');
+
+            if (authReady) {
+                startApp();
+            }
+        }
+        
+        // --- 3. 初始化 Firebase & 認證 ---
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        // 登入成功
+                        userId = user.uid;
+                        myUserIdDisplay.textContent = userId.substring(0, 8) + "..."; 
+                        authReady = true;
+                        
+                        // 如果房間也加入了，啟動 app
+                        if (roomJoined) {
+                            startApp();
+                        }
+                    } else {
+                        // 用戶已登出 (不應該發生在匿名登入中)
+                        // 但如果發生，我們嘗試再次匿名登入
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (anonError) {
+                             console.error("Firebase 匿名登入重試失敗:", anonError);
+                        }
+                    }
+                });
+                
+                // *** (錯誤修正) ***
+                // 移除 __initial_auth_token 檢查，
+                // 強制一律使用匿名登入來登入您自己的 vdctest1 專案。
+                // 這會觸發上面的 onAuthStateChanged
+                await signInAnonymously(auth);
+
+            } catch (error) {
+                console.error("Firebase 初始化失敗:", error);
+                // 顯示特定的 auth/configuration-not-found 錯誤
+                if (error.code === 'auth/configuration-not-found') {
+                    lobbyPage.classList.remove('hidden');
+                    videoChatPage.classList.add('hidden');
+                    lobbyError.textContent = "Firebase 錯誤：尚未啟用匿名登入。";
+                } else if (error.code === 'auth/custom-token-mismatch') {
+                     // 捕捉並顯示這個錯誤
+                     lobbyError.textContent = "Firebase 權杖錯誤 (請忽略)。";
+                }
+                myUserIdDisplay.textContent = "Firebase 錯誤";
+            }
+        }
+        
+        
+        // --- 4. 啟動應用程式 (WebRTC) ---
+        async function startApp() {
+            if (!userId || !currentRoomId) {
+                console.error("Auth 或 Room ID 尚未準備就緒，無法啟動 App。");
+                return;
+            }
+
+            try {
+                // *** 設定動態 Firestore 路徑 ***
+                usersCollectionPath = `artifacts/${appId}/public/data/webrtc_liquid_chat/${currentRoomId}/users`;
+                signalsCollectionPath = `artifacts/${appId}/public/data/webrtc_liquid_chat/${currentRoomId}/signals`;
+
+                getNickname();
+                await startLocalMedia();
+                
+                const userDocRef = doc(db, usersCollectionPath, userId);
+                await setDoc(userDocRef, { 
+                    joined: serverTimestamp(),
+                    nickname: userNickname 
+                });
+                
+                window.addEventListener('beforeunload', (e) => {
+                    deleteDoc(userDocRef); 
+                });
+
+                listenForPeers();
+                listenForSignals();
+                initControlEvents();
+                
+                // *** 啟動時呼叫排版 ***
+                updateGridLayout();
+                
+            } catch (error) {
+                console.error("啟動應用失敗:", error);
+                // 如果是權限問題
+                if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
+                    lobbyPage.classList.remove('hidden');
+                    videoChatPage.classList.add('hidden');
+                    lobbyError.textContent = "錯誤：無法取得攝影機或麥克風權限。";
+                } else {
+                    alert("無法取得您的攝影機或麥克風權限。請檢查瀏覽器設定。");
+                }
+            }
+        }
+
+        // --- 5. 媒體 & 設備 ---
+        
+        async function startLocalMedia(constraints = {}) {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close();
+            }
+
+            const audioConstraints = {
+                noiseSuppression: noiseSuppressionCheckbox.checked, 
+                echoCancellation: true,
+                ...constraints.audio
+            };
+            
+            const videoConstraints = {
+                ...constraints.video
+            };
+
+            // *** 處理權限錯誤 ***
+            let stream;
+            try {
+                 stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: videoConstraints, 
+                    audio: audioConstraints 
+                });
+            } catch (error) {
+                console.error("getUserMedia 錯誤:", error);
+                // 將錯誤丟出，讓 startApp() 可以捕捉到
+                throw error;
+            }
+            
+            localStream = stream; 
+            localVideo.srcObject = stream;
+            
+            audioContext = new AudioContext();
+            localAudioSource = audioContext.createMediaStreamSource(stream);
+            gainNode = audioContext.createGain(); 
+            gainNode.gain.value = inputVolumeSlider.value; 
+            
+            localAudioAnalyser = audioContext.createAnalyser();
+            localAudioAnalyser.fftSize = 256;
+            localAudioDataArray = new Uint8Array(localAudioAnalyser.frequencyBinCount);
+            
+            localStreamDestination = audioContext.createMediaStreamDestination();
+            
+            localAudioSource.connect(gainNode);
+            gainNode.connect(localAudioAnalyser);
+            localAudioAnalyser.connect(localStreamDestination);
+            
+            detectSpeaking(localAudioAnalyser, localAudioDataArray, localVideoCard, micVolumeMeter);
+            
+            const controlledAudioTrack = localStreamDestination.stream.getAudioTracks()[0];
+            const videoTrack = stream.getVideoTracks()[0];
+            
+            // 確保軌道存在
+            if (!videoTrack || !controlledAudioTrack) {
+                console.error("無法取得音訊或視訊軌道");
+                return;
+            }
+            
+            const streamToSend = new MediaStream([videoTrack, controlledAudioTrack]);
+
+            for (const peerId in peerConnections) {
+                const pc = peerConnections[peerId];
+                
+                const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (videoSender) {
+                    videoSender.replaceTrack(videoTrack);
+                } else {
+                    pc.addTrack(videoTrack, streamToSend);
+                }
+                
+                const audioSender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+                if (audioSender) {
+                    audioSender.replaceTrack(controlledAudioTrack);
+                } else {
+                    pc.addTrack(controlledAudioTrack, streamToSend);
+                }
+            }
+            
+            await populateDeviceLists();
+        }
+
+        async function populateDeviceLists() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                micSelect.innerHTML = '';
+                videoSelect.innerHTML = '';
+                
+                let hasMic = false;
+                let hasVideo = false;
+                
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Device ${device.deviceId.substring(0, 6)}`;
+                    
+                    if (device.kind === 'audioinput') {
+                        micSelect.appendChild(option);
+                        hasMic = true;
+                    } else if (device.kind === 'videoinput') {
+                        videoSelect.appendChild(option);
+                        hasVideo = true;
+                    }
+                });
+                
+                if (!hasMic) micSelect.innerHTML = "<option>找不到麥克風</option>";
+                if (!hasVideo) videoSelect.innerHTML = "<option>找不到攝影機</option>";
+                
+                const currentAudioTrack = localStream.getAudioTracks()[0];
+                const currentVideoTrack = localStream.getVideoTracks()[0];
+                if (currentAudioTrack && hasMic) {
+                    micSelect.value = currentAudioTrack.getSettings().deviceId;
+                }
+                if (currentVideoTrack && hasVideo) {
+                    videoSelect.value = currentVideoTrack.getSettings().deviceId;
+                }
+            } catch (e) {
+                console.error("列舉設備失敗:", e);
+            }
+        }
+        
+        function detectSpeaking(analyser, dataArray, cardElement, volumeMeter) {
+            const update = () => {
+                if (!analyser || analyser.context.state === 'closed') return;
+                
+                analyser.getByteFrequencyData(dataArray);
+                let sum = dataArray.reduce((a, b) => a + b, 0);
+                let average = sum / dataArray.length; 
+
+                if (volumeMeter) {
+                    const volumePercent = (average / 255) * 100;
+                    volumeMeter.value = volumePercent * 2; 
+                }
+
+                if (cardElement.id === 'local-video-card' && gainNode) {
+                    const gateEnabled = noiseGateCheckbox.checked;
+                    const gateThreshold = noiseGateThresholdSlider.value * 2.55; 
+                    const inputVolume = inputVolumeSlider.value;
+
+                    if (gateEnabled) {
+                        if (average < gateThreshold) {
+                            if (gainNode.gain.value !== 0) {
+                                gainNode.gain.value = 0;
+                            }
+                        } else {
+                            if (gainNode.gain.value !== inputVolume) {
+                                gainNode.gain.value = inputVolume;
+                            }
+                        }
+                    } else {
+                        if (gainNode.gain.value !== inputVolume) {
+                             gainNode.gain.value = inputVolume;
+                        }
+                    }
+                }
+                
+                if (average > 20) { 
+                    cardElement.classList.add('is-speaking');
+                    
+                    if (cardElement.speakingTimer) {
+                        clearTimeout(cardElement.speakingTimer);
+                    }
+                    
+                    cardElement.speakingTimer = setTimeout(() => {
+                        cardElement.classList.remove('is-speaking');
+                    }, 500);
+                }
+                
+                requestAnimationFrame(update);
+            };
+            update();
+        }
+
+        // --- 6. WebRTC 核心邏輯 ---
+
+        function listenForPeers() {
+            const q = query(collection(db, usersCollectionPath));
+            
+            onSnapshot(q, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    const peerId = change.doc.id;
+                    const peerData = change.doc.data();
+                    if (peerId === userId) return;
+
+                    if (change.type === 'added') {
+                        console.log(`新用戶加入: ${peerId} (${peerData.nickname})`);
+                        createPeerConnection(peerId, true, peerData.nickname); 
+                        updateGridLayout();
+                    }
+                    
+                    if (change.type === 'modified') {
+                        console.log(`用戶資料變更: ${peerId} (${peerData.nickname})`);
+                        updateNickname(peerId, peerData.nickname);
+                    }
+                    
+                    if (change.type === 'removed') {
+                        console.log(`用戶離開: ${peerId}`);
+                        closePeerConnection(peerId);
+                        updateGridLayout(); 
+                    }
+                });
+            });
+        }
+        
+        function listenForSignals() {
+            const q = query(collection(db, signalsCollectionPath), where("to", "==", userId));
+            
+            onSnapshot(q, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === 'added') {
+                        const signal = change.doc.data();
+                        const fromId = signal.from;
+                        handleSignal(fromId, signal);
+                        deleteDoc(change.doc.ref);
+                    }
+                });
+            });
+        }
+
+        async function createPeerConnection(peerId, isInitiator = false, peerNickname = null) {
+            if (peerConnections[peerId]) {
+                return;
+            }
+            
+            const pc = new RTCPeerConnection(iceServers);
+            peerConnections[peerId] = pc;
+            
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendSignal(peerId, { candidate: event.candidate.toJSON() });
+                }
+            };
+            
+            pc.ontrack = (event) => {
+                let stream = remoteStreams[peerId];
+                if (!stream) {
+                    stream = new MediaStream();
+                    remoteStreams[peerId] = stream;
+                    addVideoStream(peerId, stream, peerNickname);
+                }
+                stream.addTrack(event.track);
+            };
+
+            if (localStreamDestination && localStreamDestination.stream.getAudioTracks().length > 0) {
+                const audioTrack = localStreamDestination.stream.getAudioTracks()[0];
+                pc.addTrack(audioTrack, localStreamDestination.stream);
+            }
+            if (localStream && localStream.getVideoTracks().length > 0) {
+                const videoTrack = localStream.getVideoTracks()[0];
+                pc.addTrack(videoTrack, localStream);
+            }
+
+            if (isInitiator) {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    sendSignal(peerId, { sdp: pc.localDescription.toJSON() });
+                } catch (error) {
+                    console.error(`創建 Offer 失敗 (to ${peerId}):`, error);
+                }
+            }
+        }
+        
+        async function handleSignal(fromId, signal) {
+            if (!peerConnections[fromId]) {
+                createPeerConnection(fromId, false);
+            }
+            
+            const pc = peerConnections[fromId];
+
+            try {
+                if (signal.sdp) {
+                    const sdp = new RTCSessionDescription(signal.sdp);
+                    await pc.setRemoteDescription(sdp);
+                    
+                    if (sdp.type === 'offer') {
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        sendSignal(fromId, { sdp: pc.localDescription.toJSON() });
+                    }
+                } else if (signal.candidate) {
+                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                }
+            } catch (error) {
+                console.error(`處理訊號失敗 (from ${fromId}):`, error);
+            }
+        }
+        
+        async function sendSignal(toId, data) {
+            try {
+                await addDoc(collection(db, signalsCollectionPath), {
+                    to: toId,
+                    from: userId,
+                    ...data
+                });
+            } catch (error) {
+                console.error(`發送訊號失敗 (to ${toId}):`, error);
+            }
+        }
+
+        function closePeerConnection(peerId) {
+            const pc = peerConnections[peerId];
+            if (pc) {
+                pc.close();
+                delete peerConnections[peerId];
+            }
+            if (remoteStreams[peerId]) {
+                delete remoteStreams[peerId];
+            }
+            removeVideoStream(peerId);
+        }
+
+        // --- 7. UI 處理 ---
+        
+        function addVideoStream(peerId, stream, nickname = null) {
+            if (document.getElementById(`video-card-${peerId}`)) return; 
+
+            const card = document.createElement('div');
+            card.id = `video-card-${peerId}`;
+            card.className = 'video-card remote glassmorphism relative group';
+            card.dataset.userId = peerId;
+            
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.volume = outputVolumeSlider.value; 
+
+            const nameTag = document.createElement('div');
+            nameTag.className = 'nickname-tag'; 
+            nameTag.id = `nickname-${peerId}`;
+            nameTag.textContent = nickname || `用戶 ${peerId.substring(0, 6)}`;
+            
+            const speakingIndicator = document.createElement('div');
+            speakingIndicator.className = 'speaking-indicator';
+
+            card.appendChild(video);
+            card.appendChild(nameTag);
+            card.appendChild(speakingIndicator);
+            videoGrid.appendChild(card);
+            
+            try {
+                const remoteAudioContext = new AudioContext();
+                const remoteSource = remoteAudioContext.createMediaStreamSource(stream);
+                const remoteAnalyser = remoteAudioContext.createAnalyser();
+                remoteAnalyser.fftSize = 256;
+                const remoteDataArray = new Uint8Array(remoteAnalyser.frequencyBinCount);
+                remoteSource.connect(remoteAnalyser);
+                detectSpeaking(remoteAnalyser, remoteDataArray, card, null);
+            } catch (e) {
+                console.warn("無法為遠端串流建立音量分析 (可能沒有音軌):", e);
+            }
+        }
+
+        function removeVideoStream(peerId) {
+            const card = document.getElementById(`video-card-${peerId}`);
+            if (card) {
+                card.remove();
+            }
+        }
+        
+        function updateNickname(peerId, nickname) {
+            const nameTag = document.getElementById(`nickname-${peerId}`);
+            if (nameTag && nickname) {
+                nameTag.textContent = nickname;
+            }
+        }
+
+        function initControlEvents() {
+            const toggleMicBtn = document.getElementById('toggle-mic');
+            const toggleVideoBtn = document.getElementById('toggle-video');
+            const toggleSettingsBtn = document.getElementById('toggle-settings');
+            const closeSettingsBtn = document.getElementById('close-settings');
+            
+            const iconMic = document.getElementById('icon-mic');
+            const iconMicOff = document.getElementById('icon-mic-off');
+            const iconVideo = document.getElementById('icon-video');
+            const iconVideoOff = document.getElementById('icon-video-off');
+
+            let isMicOn = true;
+            let isVideoOn = true;
+
+            toggleMicBtn.onclick = () => {
+                if (!localStream) return;
+                isMicOn = !isMicOn;
+                localStream.getAudioTracks().forEach(track => track.enabled = isMicOn);
+                iconMic.classList.toggle('hidden', !isMicOn);
+                iconMicOff.classList.toggle('hidden', isMicOn);
+                toggleMicBtn.classList.toggle('bg-red-500/70', !isMicOn);
+                toggleMicBtn.classList.toggle('hover:bg-red-500/90', !isMicOn);
+                toggleMicBtn.classList.toggle('bg-white/50', isMicOn);
+                toggleMicBtn.classList.toggle('hover:bg-white/80', isMicOn);
+                toggleMicBtn.classList.toggle('text-white', !isMicOn);
+                toggleMicBtn.classList.toggle('text-gray-900', isMicOn);
+            };
+
+            toggleVideoBtn.onclick = () => {
+                if (!localStream) return;
+                isVideoOn = !isVideoOn;
+                localStream.getVideoTracks().forEach(track => track.enabled = isVideoOn);
+                iconVideo.classList.toggle('hidden', !isVideoOn);
+                iconVideoOff.classList.toggle('hidden', isVideoOn);
+                toggleVideoBtn.classList.toggle('bg-red-500/70', !isVideoOn);
+                toggleVideoBtn.classList.toggle('hover:bg-red-500/90', !isVideoOn);
+                toggleVideoBtn.classList.toggle('bg-white/50', isVideoOn);
+                toggleVideoBtn.classList.toggle('hover:bg-white/80', isVideoOn);
+                toggleVideoBtn.classList.toggle('text-white', !isVideoOn);
+                toggleVideoBtn.classList.toggle('text-gray-900', isVideoOn);
+            };
+            
+            toggleSettingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+            closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+            
+            saveNicknameBtn.onclick = () => {
+                saveNickname(nicknameInput.value, true); 
+            };
+            nicknameInput.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    saveNickname(nicknameInput.value, true);
+                }
+            };
+            
+            micSelect.onchange = async () => {
+                if (micSelect.value)
+                    await startLocalMedia({ audio: { deviceId: { exact: micSelect.value } } });
+            };
+            videoSelect.onchange = async () => {
+                if (videoSelect.value)
+                    await startLocalMedia({ video: { deviceId: { exact: videoSelect.value } } });
+            };
+            
+            noiseSuppressionCheckbox.onchange = async () => {
+                 if (localStream && localStream.getAudioTracks().length > 0) {
+                    const track = localStream.getAudioTracks()[0];
+                    try {
+                        await track.applyConstraints({
+                            noiseSuppression: noiseSuppressionCheckbox.checked
+                        });
+                        console.log("噪音抑制已切換:", noiseSuppressionCheckbox.checked);
+                    } catch (error) {
+                        console.error("切換噪音抑制失敗:", error);
+                        await startLocalMedia();
+                    }
+                 }
+            };
+            
+            outputVolumeSlider.oninput = (e) => {
+                document.querySelectorAll('.remote video').forEach(video => {
+                    video.volume = e.target.value;
+                });
+            };
+        }
+
+        // --- 8. (新) 動態網格佈局 ---
+        function updateGridLayout() {
+            if (!videoGrid) return;
+            const participantCount = Object.keys(peerConnections).length + 1; 
+            
+            // 重置 class
+            videoGrid.className = 'w-full h-full grid gap-4 p-4 pb-24'; 
+            
+            if (participantCount === 1) {
+                videoGrid.classList.add('layout-1');
+            } else if (participantCount === 2) {
+                videoGrid.classList.add('layout-2');
+            } else if (participantCount === 3) {
+                videoGrid.classList.add('layout-3');
+            } else if (participantCount === 4) {
+                videoGrid.classList.add('layout-4');
+            } else if (participantCount >= 5 && participantCount <= 6) {
+                videoGrid.classList.add('layout-5-6');
+            } else if (participantCount >= 7 && participantCount <= 9) {
+                videoGrid.classList.add('layout-7-9');
+            } else { // 10+
+                videoGrid.classList.add('layout-10-plus');
+            }
+        }
+
+        // --- 啟動！ ---
+        initLobby(); // 啟動大廳
+        initFirebase(); // 開始背景認證
+
+    </script>
+</body>
+</html>
