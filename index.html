@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Liquid Glass P2P 視訊會議</title>
+    <title>ARIES VIDEO CHAT</title>
     
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -389,6 +389,11 @@
                 <!-- 設定按鈕 -->
                 <button id="toggle-settings" class="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-all text-gray-900">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                
+                <!-- *** (新功能) 退出房間按鈕 *** -->
+                <button id="leave-room-btn" class="p-3 bg-red-500/70 hover:bg-red-500/90 rounded-full transition-all text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                 </button>
             </div>
         </div>
@@ -1105,11 +1110,47 @@
             }
         }
 
+        // --- 8. (新) 退出房間 ---
+        async function leaveRoom() {
+            console.log("正在退出房間...");
+
+            // 1. 關閉所有 P2P 連線
+            for (const peerId in peerConnections) {
+                closePeerConnection(peerId);
+            }
+            peerConnections = {};
+            remoteStreams = {};
+
+            // 2. 停止本地媒體
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close();
+            }
+            localStream = null;
+
+            // 3. 從 Firestore 刪除自己
+            if (userId && db && usersCollectionPath) {
+                const userDocRef = doc(db, usersCollectionPath, userId);
+                try {
+                    await deleteDoc(userDocRef);
+                } catch (e) {
+                    console.error("刪除用戶文件失敗:", e);
+                }
+            }
+            
+            // 4. 重新載入頁面，回到大廳
+            location.reload();
+        }
+
+        // --- 9. 控制項事件 ---
         function initControlEvents() {
             const toggleMicBtn = document.getElementById('toggle-mic');
             const toggleVideoBtn = document.getElementById('toggle-video');
             const toggleSettingsBtn = document.getElementById('toggle-settings');
             const closeSettingsBtn = document.getElementById('close-settings');
+            const leaveRoomBtn = document.getElementById('leave-room-btn'); // *** (新) 取得按鈕 ***
             
             const iconMic = document.getElementById('icon-mic');
             const iconMicOff = document.getElementById('icon-mic-off');
@@ -1149,6 +1190,9 @@
             
             toggleSettingsBtn.onclick = () => settingsModal.classList.remove('hidden');
             closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+            
+            // *** (新) 退出按鈕事件 ***
+            leaveRoomBtn.onclick = leaveRoom; 
             
             saveNicknameBtn.onclick = () => {
                 saveNickname(nicknameInput.value, true); 
@@ -1190,7 +1234,7 @@
             };
         }
 
-        // --- 8. (新) 動態網格佈局 ---
+        // --- 10. 動態網格佈局 ---
         function updateGridLayout() {
             if (!videoGrid) return;
             const participantCount = Object.keys(peerConnections).length + 1; 
